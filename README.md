@@ -110,19 +110,16 @@ docker compose -f docker-compose.pg.yml up -d --build
   <tr>
     <!-- 第一个图片：个人二维码 -->
     <td style="text-align:center; padding:10px;">
-      <img src="https://github.com/user-attachments/assets/c73b2dd6-c3aa-4675-b166-99ba4675c80e" alt="个人二维码" width="300" />
+ <img src="https://github.com/user-attachments/assets/73466c31-31f6-4c25-af49-47506acb5043" alt="个人二维码" width="300" />
       <br>
-      <small>个人二维码</small>
-    </td>
+ </td>
     <!-- 第二个图片：个人收款码 -->
-    <td style="text-align:center; padding:10px;">
-      <img src="https://github.com/user-attachments/assets/bba951cf-9319-4bf3-a9c4-db9b9e1e69c4" alt="个人收款码" width="300" />
+ <td style="text-align:center; padding:10px;">
+ <img src="https://github.com/user-attachments/assets/51fb80d0-09cf-4cfc-837b-42e43cbeb70b" alt="个人收款码" width="300" />
       <br>
-      <small>个人收款码</small>
-    </td>
+ </td>
   </tr>
 </table>
-
 
 
 
