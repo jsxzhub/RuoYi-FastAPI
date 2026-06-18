@@ -541,12 +541,13 @@ class LoggerInitializer:
         :return: 普通文本格式模板
         """
         record['extra']['sanitized_exception'] = self._build_plain_exception_suffix(record)
+        # 字段顺序：时间 | 链路ID | 跨度ID | 请求ID | 工作进程 | 级别 | 位置 - 消息
         return (
             '<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | '
-            '<cyan>{extra[trace_id]}</cyan> | '
-            '<magenta>{extra[span_id]}</magenta> | '
-            '<yellow>{extra[request_id]}</yellow> | '
-            '<blue>{extra[worker_id]}</blue> | '
+            '<cyan>trace={extra[trace_id]}</cyan> | '
+            '<magenta>span={extra[span_id]}</magenta> | '
+            '<yellow>req={extra[request_id]}</yellow> | '
+            '<blue>worker={extra[worker_id]}</blue> | '
             '<level>{level: <8}</level> | '
             '<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - '
             '<level>{message}</level>{extra[sanitized_exception]}\n'
