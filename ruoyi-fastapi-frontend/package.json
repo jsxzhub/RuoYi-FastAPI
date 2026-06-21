@@ -17,6 +17,7 @@
     "url": "https://gitee.com/insistence2022/RuoYi-Vue3-FastAPI.git"
   },
   "dependencies": {
+    "@amap/amap-jsapi-loader": "^1.0.1",
     "@ant-design/icons-vue": "^7.0.1",
     "@antv/g2plot": "^2.4.31",
     "@antv/infographic": "^0.2.13",
