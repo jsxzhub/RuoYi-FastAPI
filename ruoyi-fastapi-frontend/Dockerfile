@@ -1,5 +1,5 @@
 # 构建阶段
-FROM node:18-slim AS builder
+FROM node:24-alpine AS builder
 WORKDIR /app
 
 # 复制源代码
