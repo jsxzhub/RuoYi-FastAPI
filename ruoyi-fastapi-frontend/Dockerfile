@@ -14,15 +14,9 @@ RUN npm install
 # 执行docker构建命令
 RUN npm run build:docker
 
-# 运行阶段
-FROM nginx:latest
-WORKDIR /usr/share/nginx/html
-
-# 复制构建产物
-COPY --from=builder /app/dist .
-
-# 暴露端口
-EXPOSE 80
-
-# 启动nginx
-CMD ["nginx", "-g", "daemon off;"]
+# 输出阶段 - 仅导出 dist 供宿主机 Nginx 使用
+FROM alpine:latest
+WORKDIR /app
+COPY --from=builder /app/dist ./dist-src
+VOLUME ["/dist"]
+CMD cp -r /app/dist-src/. /dist/
