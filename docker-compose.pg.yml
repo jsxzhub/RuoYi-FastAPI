@@ -15,8 +15,8 @@ services:
   # 后端服务（PostgreSQL版本）
   ruoyi-backend-pg:
     build:
-      context: ./ruoyi-fastapi-backend
-      dockerfile: Dockerfile.pg
+      context: .
+      dockerfile: ruoyi-fastapi-backend/Dockerfile.pg
     image: ruoyi-backend-pg:latest
     container_name: ruoyi-backend-pg
     ports:

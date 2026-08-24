@@ -2,10 +2,18 @@ FROM python:3.13
 WORKDIR /app
 
 # 复制源代码
-COPY . .
+COPY ruoyi-fastapi-backend/ ./
+
+# 复制前端 package.json 和插件前端源码，供插件 npm 依赖声明与前端结构校验读取
+COPY ruoyi-fastapi-frontend/package.json /frontend/package.json
+COPY ruoyi-fastapi-frontend/plugins/ /frontend/plugins/
+ENV RUOYI_FRONTEND_ROOT=/frontend
 
 # 安装依赖
 RUN pip install --no-cache-dir -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
+
+# 安装插件依赖（来自各插件 plugin.yaml 的 dependencies.python，见 requirements-plugin.txt）
+RUN pip install --no-cache-dir -r requirements-plugin.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
 
 # 暴露端口
 EXPOSE 9099

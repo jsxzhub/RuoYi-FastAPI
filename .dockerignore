@@ -1,0 +1,6 @@
+# 后端镜像以仓库根为构建上下文（见 docker-compose.*.yml）
+# 采用白名单：只放行后端工程与前端 package.json，避免 app/test/.git 等进入构建上下文
+*
+!ruoyi-fastapi-backend/
+!ruoyi-fastapi-frontend/package.json
+!ruoyi-fastapi-frontend/plugins/
