@@ -1,0 +1,8 @@
+# 前端镜像构建上下文排除项
+# node_modules 必须排除：本地安装的依赖与容器内 npm/node 版本不兼容，
+# 拷入后会导致 npm install 崩溃（Cannot read properties of null）
+node_modules
+dist
+.git
+*.log
+.DS_Store

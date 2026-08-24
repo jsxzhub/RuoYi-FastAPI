@@ -18,8 +18,8 @@ services:
   # 后端服务（MySQL版本）
   ruoyi-backend-my:
     build:
-      context: ./ruoyi-fastapi-backend
-      dockerfile: Dockerfile.my
+      context: .
+      dockerfile: ruoyi-fastapi-backend/Dockerfile.my
     image: ruoyi-backend-my:latest
     container_name: ruoyi-backend-my
     ports:

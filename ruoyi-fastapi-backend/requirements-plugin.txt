@@ -1,0 +1,18 @@
+# 插件 Python 依赖（方案A：构建期固化进 Docker 镜像）
+# 来源：各插件 plugins/<plugin_id>/plugin.yaml 的 dependencies.python 声明
+# 同步纪律：新增/升级插件时，需将对应 python 依赖合并进本文件，并保持版本约束一致
+# 当前覆盖插件：ai (0.1.0)
+
+# ai 插件
+agno==2.8.6
+anthropic==0.120.2
+cerebras-cloud-sdk==1.91.0
+cohere==7.0.8
+google-genai==2.16.0
+groq==1.6.0
+litellm==1.94.0
+llama-api-client==0.6.0
+mistralai==2.8.0
+ollama==0.6.2
+openai==2.52.0
+portkey-ai==2.3.4
