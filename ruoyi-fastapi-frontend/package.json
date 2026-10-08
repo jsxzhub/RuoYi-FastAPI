@@ -41,6 +41,7 @@
     "nprogress": "0.2.0",
     "pinia": "3.0.4",
     "shiki": "^3.21.0",
+    "sortablejs": "1.14.0",
     "stream-diffs": "0.0.2",
     "stream-markdown": "0.0.16",
     "stream-monaco": "0.0.48",
@@ -63,5 +64,6 @@
   },
   "overrides": {
     "quill": "2.0.2"
-  }
+  },
+  "packageManager": "pnpm@11.23.0+sha512.f00082e5b283a199b74e079da28d155c008fe232f44c8a06ea7ddfa014ecf719fc362f790ecc67b28106ddac2afb24c49a9a079159da560b2ce7d1e98efd11af"
 }
