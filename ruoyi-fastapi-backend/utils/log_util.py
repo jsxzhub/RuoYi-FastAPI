@@ -6,6 +6,7 @@ import re
 import sys
 import traceback
 from collections.abc import Mapping, Sequence
+from datetime import timezone
 from typing import Any
 
 from loguru import logger as _logger
@@ -543,11 +544,11 @@ class LoggerInitializer:
         record['extra']['sanitized_exception'] = self._build_plain_exception_suffix(record)
         # 字段顺序：时间 | 链路ID | 跨度ID | 请求ID | 工作进程 | 级别 | 位置 - 消息
         return (
-            '<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | '
-            '<cyan>trace={extra[trace_id]}</cyan> | '
-            '<magenta>span={extra[span_id]}</magenta> | '
-            '<yellow>req={extra[request_id]}</yellow> | '
-            '<blue>worker={extra[worker_id]}</blue> | '
+            '<green>{time:YYYY-MM-DDTHH:mm:ss.SSS}Z</green> | '
+            '<cyan>{extra[trace_id]}</cyan> | '
+            '<magenta>{extra[span_id]}</magenta> | '
+            '<yellow>{extra[request_id]}</yellow> | '
+            '<blue>{extra[worker_id]}</blue> | '
             '<level>{level: <8}</level> | '
             '<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - '
             '<level>{message}</level>{extra[sanitized_exception]}\n'
@@ -561,6 +562,7 @@ class LoggerInitializer:
         :return: 脱敏后的日志记录字典
         """
         record['message'] = LogSanitizer.sanitize_text(record['message'])
+        record['time'] = record['time'].astimezone(timezone.utc)
         return record
 
     def _info_file_filter(self, record: dict) -> bool:

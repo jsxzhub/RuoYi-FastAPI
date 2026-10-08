@@ -1,5 +1,4 @@
 from collections.abc import Sequence
-from datetime import datetime, time
 from typing import Any
 
 from sqlalchemy import ColumnElement, and_, delete, desc, func, select, update
@@ -12,6 +11,7 @@ from module_admin.entity.do.role_do import SysRole, SysRoleDept, SysRoleMenu
 from module_admin.entity.do.user_do import SysUser, SysUserRole
 from module_admin.entity.vo.role_vo import RoleDeptModel, RoleMenuModel, RoleModel, RolePageQueryModel
 from utils.page_util import PageUtil
+from utils.time_util import TimezoneUtil
 
 
 class RoleDao:
@@ -142,6 +142,9 @@ class RoleDao:
         :param is_page: 是否开启分页
         :return: 角色列表信息对象
         """
+        time_range = TimezoneUtil.local_date_strings_to_utc(
+            query_object.begin_time, query_object.end_time, timezone_name=TimezoneUtil.get_request_timezone()
+        )
         query = (
             select(SysRole)
             .join(SysUserRole, SysUserRole.role_id == SysRole.role_id, isouter=True)
@@ -153,12 +156,8 @@ class RoleDao:
                 SysRole.role_name.like(f'%{query_object.role_name}%') if query_object.role_name else True,
                 SysRole.role_key.like(f'%{query_object.role_key}%') if query_object.role_key else True,
                 SysRole.status == query_object.status if query_object.status else True,
-                SysRole.create_time.between(
-                    datetime.combine(datetime.strptime(query_object.begin_time, '%Y-%m-%d'), time(00, 00, 00)),
-                    datetime.combine(datetime.strptime(query_object.end_time, '%Y-%m-%d'), time(23, 59, 59)),
-                )
-                if query_object.begin_time and query_object.end_time
-                else True,
+                SysRole.create_time >= time_range[0] if time_range and time_range[0] is not None else True,
+                SysRole.create_time < time_range[1] if time_range and time_range[1] is not None else True,
                 data_scope_sql,
             )
             .order_by(SysRole.role_sort)
@@ -247,6 +246,18 @@ class RoleDao:
         )
 
         return role_menu_query_all
+
+    @classmethod
+    async def list_role_menu_ids(cls, db: AsyncSession, role_id: int) -> Sequence[int]:
+        """
+        查询角色完整菜单关联编号
+
+        :param db: 异步数据库会话
+        :param role_id: 角色编号
+        :return: 角色已关联的菜单编号序列
+        """
+        result = await db.execute(select(SysRoleMenu.menu_id).where(SysRoleMenu.role_id == role_id))
+        return result.scalars().all()
 
     @classmethod
     async def add_role_menu_dao(cls, db: AsyncSession, role_menu: RoleMenuModel) -> None:

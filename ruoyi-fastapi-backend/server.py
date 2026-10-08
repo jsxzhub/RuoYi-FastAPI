@@ -9,11 +9,12 @@ from common.router import auto_register_routers
 from config.database import DataSourceRegistry
 from config.env import AppConfig
 from config.get_redis import RedisUtil
-from config.get_scheduler import SchedulerUtil
 from config.lifecycle import init_create_table
+from config.scheduler.manager import SchedulerManager
 from exceptions.handle import handle_exception
 from middlewares.handle import handle_middleware
 from module_admin.service.log_service import LogAggregatorService
+from module_identity.service.runtime_service import OidcRuntimeService
 from plugins.core.runtime.application import get_plugin_application_runtime
 from sub_applications.handle import handle_sub_applications
 from utils.common_util import worship
@@ -29,8 +30,9 @@ async def _start_background_tasks(app: FastAPI) -> None:
     :param app: FastAPI对象
     :return: None
     """
-    await SchedulerUtil.init_system_scheduler(app.state.redis)
+    await SchedulerManager.init_system_scheduler(app.state.redis)
     app.state.log_aggregator_task = asyncio.create_task(LogAggregatorService.consume_stream(app.state.redis))
+    await OidcRuntimeService.start_background_tasks(app)
 
 
 async def _stop_background_tasks(app: FastAPI) -> None:
@@ -48,13 +50,14 @@ async def _stop_background_tasks(app: FastAPI) -> None:
                 await log_task
             except asyncio.CancelledError:
                 pass
+        await OidcRuntimeService.stop_background_tasks(app)
     finally:
         try:
             redis = getattr(app.state, 'redis', None)
             if redis is not None:
                 try:
                     # Scheduler负责停止续期并释放Application租约，必须先于Redis连接池关闭。
-                    await SchedulerUtil.close_system_scheduler()
+                    await SchedulerManager.close_system_scheduler()
                 finally:
                     await RedisUtil.close_redis_pool(app)
         finally:
@@ -78,9 +81,17 @@ async def _initialize_application_runtime(app: FastAPI, application_leader: bool
         stage='platform',
         log_success_enabled=application_leader,
     )
+    try:
+        await OidcRuntimeService.refresh_cors_snapshot(app)
+    except Exception:
+        app.state.oidc_registered_cors_origins = ()
+        logger.error('OIDC 已注册跨域来源快照加载失败')
+    await OidcRuntimeService.validate_runtime(app)
 
     async def create_plugin_entity_tables() -> None:
-        """在插件 writer 导入实体后同步插件表。"""
+        """
+        在插件 writer 导入实体后同步插件表。
+        """
         await init_create_table(
             stage='plugin_entities',
             log_success_enabled=True,
@@ -98,6 +109,7 @@ async def _initialize_application_runtime(app: FastAPI, application_leader: bool
     )
     await RedisUtil.init_sys_dict(app.state.redis)
     await RedisUtil.init_sys_config(app.state.redis)
+    app.state.application_leader = application_leader
     await _start_background_tasks(app)
 
 
@@ -126,7 +138,14 @@ def _log_address_group(
     *,
     path: str = '',
 ) -> None:
-    """输出一组本地和网络访问地址。"""
+    """
+    输出一组本地和网络访问地址。
+
+    :param title: 地址分组标题。
+    :param local_ip: 本机地址。
+    :param network_ips: 网络地址列表。
+    :param path: 地址路径。
+    """
     port = AppConfig.app_port
     links = [f'🏠 Local:    <cyan>http://{local_ip}:{port}{path}</cyan>']
     links.extend(f'📡 Network:  <cyan>http://{ip}:{port}{path}</cyan>' for ip in network_ips)
@@ -169,7 +188,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     app.state.plugin_application_runtime_started = False
     try:
         app.state.redis = await RedisUtil.create_redis_pool(log_enabled=False)
-        application_lock_owner_token = SchedulerUtil.get_application_lock_owner_token()
+        application_lock_owner_token = SchedulerManager.get_application_lock_owner_token()
         application_leader = await StartupUtil.acquire_application_leader(
             redis=app.state.redis,
             lock_key=LockConstant.APP_STARTUP_LOCK_KEY,
@@ -181,7 +200,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
         # 获取锁成功后立即启动锁续期任务，避免初始化时间过长导致锁过期
         if application_leader:
-            SchedulerUtil.start_application_lock_renewal(app.state.redis)
+            SchedulerManager.start_application_lock_renewal(app.state.redis)
 
         startup_logger = logger.bind(
             startup_phase='application_startup',
@@ -189,12 +208,16 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         )
         if application_leader:
             startup_logger.info(f'⏰️ {AppConfig.app_name}开始启动')
+            startup_logger.bind(
+                storage_timezone='UTC',
+                app_timezone=AppConfig.app_timezone,
+            ).info(f'🕒 时间系统已配置：storageTimeZone=UTC，appTimeZone={AppConfig.app_timezone}')
             worship()
         TransportKeyProvider.validate_runtime_configuration()
         await _initialize_application_runtime(app, application_leader=application_leader)
 
         # 初始化期间可能因续期失败失去租约；此时不得继续输出leader专属成功摘要。
-        application_leader = application_leader and SchedulerUtil.is_application_leader()
+        application_leader = application_leader and SchedulerManager.is_application_leader()
         app.state.application_leader = application_leader
         if application_leader:
             # 短暂等待确保下面的启动日志在最后打印

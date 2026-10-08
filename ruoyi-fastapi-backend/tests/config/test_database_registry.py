@@ -1,20 +1,18 @@
-from __future__ import annotations
-
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from types import SimpleNamespace
-from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, MagicMock, call
 
 import pytest
 from sqlalchemy import URL
 from sqlalchemy.exc import OperationalError
+from typing_extensions import Self
 
 from common.aspect.db_session import DBSessionDependency, get_db_session_provider
 from config import database
 from exceptions.exception import DataSourceInitializationException, DataSourceUnavailableException
 
-if TYPE_CHECKING:
-    from collections.abc import AsyncGenerator
+EXPECTED_CONNECT_TIMEOUT = 7
 
 
 def _source(*, required: bool = True) -> SimpleNamespace:
@@ -81,8 +79,16 @@ def test_engine_factories_use_driver_specific_connect_timeout(
 
     assert database.create_async_db_engine(config=config) is async_engine
     assert database.create_sync_db_engine(config=config) is sync_engine
-    assert captured_options['async']['connect_args'] == {async_timeout_key: 7}
-    assert captured_options['sync']['connect_args'] == {sync_timeout_key: 7}
+    async_connect_args = captured_options['async']['connect_args']
+    sync_connect_args = captured_options['sync']['connect_args']
+    assert async_connect_args[async_timeout_key] == EXPECTED_CONNECT_TIMEOUT
+    assert sync_connect_args[sync_timeout_key] == EXPECTED_CONNECT_TIMEOUT
+    if db_type == 'mysql':
+        assert async_connect_args['init_command'] == "SET time_zone = '+00:00'"
+        assert sync_connect_args['init_command'] == "SET time_zone = '+00:00'"
+    else:
+        assert async_connect_args['server_settings'] == {'timezone': 'UTC'}
+        assert sync_connect_args['options'] == '-c timezone=UTC'
     assert captured_options['async']['pool_use_lifo'] is True
     assert captured_options['sync']['pool_use_lifo'] is True
 
@@ -94,10 +100,11 @@ def test_async_session_factory_disables_expiration_after_commit() -> None:
 
 
 class _Begin:
-    def __init__(self, should_fail: bool = False) -> None:
+    def __init__(self, should_fail: bool = False, session_timezone: str = '+00:00') -> None:
         self.should_fail = should_fail
+        self.session_timezone = session_timezone
 
-    async def __aenter__(self) -> _Begin:
+    async def __aenter__(self) -> Self:
         if self.should_fail:
             raise RuntimeError('password=secret')
         return self
@@ -105,17 +112,36 @@ class _Begin:
     async def __aexit__(self, *_args: object) -> bool:
         return False
 
-    async def execute(self, _statement: object) -> None:
-        return None
+    async def execute(self, statement: object) -> SimpleNamespace:
+        scalar_value = 1 if str(statement) == 'SELECT 1' else self.session_timezone
+        return SimpleNamespace(scalar_one=lambda: scalar_value)
 
 
 class _Engine:
     def __init__(self) -> None:
         self.should_fail = True
+        self.session_timezone = '+00:00'
         self.dispose = AsyncMock()
 
     def begin(self) -> _Begin:
-        return _Begin(self.should_fail)
+        return _Begin(self.should_fail, self.session_timezone)
+
+
+@pytest.mark.asyncio
+async def test_health_check_rejects_non_utc_database_session(monkeypatch: pytest.MonkeyPatch) -> None:
+    engine = _Engine()
+    engine.should_fail = False
+    engine.session_timezone = 'SYSTEM'
+    monkeypatch.setattr(database, 'create_async_db_engine', lambda config: engine)
+    registry = database._DataSourceRegistry(
+        SimpleNamespace(db_default_source='primary', db_sources={'primary': _source()})
+    )
+
+    with pytest.raises(DataSourceInitializationException) as exc_info:
+        await registry.initialize(log_enabled=False)
+
+    assert exc_info.value.error_type == 'RuntimeError'
+    assert registry._runtimes == {}
 
 
 @pytest.mark.asyncio
@@ -164,8 +190,10 @@ async def test_initialize_logs_source_name(monkeypatch: pytest.MonkeyPatch) -> N
 
     await registry.initialize()
 
-    source_logger.bind.assert_called_once_with(data_source='primary', database_type='mysql', required=True)
-    source_logger.bind.return_value.info.assert_called_once_with('✅ 数据源 primary 初始化成功')
+    source_logger.bind.assert_called_once_with(
+        data_source='primary', database_type='mysql', required=True, session_timezone='+00:00'
+    )
+    source_logger.bind.return_value.info.assert_called_once_with('✅ 数据源 primary 初始化成功，sessionTimeZone=+00:00')
     await registry.dispose_all()
 
 
@@ -294,12 +322,14 @@ async def test_initialize_logs_all_sources_and_safe_failure_details(monkeypatch:
             error_type='RuntimeError',
             error_code=None,
         ),
-        call(data_source='reporting', database_type='mysql', required=False),
+        call(data_source='reporting', database_type='mysql', required=False, session_timezone='+00:00'),
     ]
     source_logger.bind.return_value.error.assert_called_once_with(
         '❌ 必需数据源 primary 连接检查失败，错误类型：RuntimeError'
     )
-    source_logger.bind.return_value.info.assert_called_once_with('✅ 数据源 reporting 初始化成功')
+    source_logger.bind.return_value.info.assert_called_once_with(
+        '✅ 数据源 reporting 初始化成功，sessionTimeZone=+00:00'
+    )
     assert 'secret' not in str(source_logger.mock_calls)
 
 
@@ -449,7 +479,6 @@ async def test_dispose_all_attempts_every_engine_when_disposal_fails(monkeypatch
 
 
 def test_dependency_provider_is_cached_per_source() -> None:
-    get_db_session_provider.cache_clear()
     assert get_db_session_provider('reporting') is get_db_session_provider('reporting')
     assert get_db_session_provider('reporting') is not get_db_session_provider('archive')
     assert DBSessionDependency('reporting').dependency is get_db_session_provider('reporting')
